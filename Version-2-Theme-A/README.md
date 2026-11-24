@@ -1,6 +1,6 @@
 # Version 2 · SVM-OptiCompress for Theme A
 
-**Dhanush Naidu · Amrita Vishwa Vidyapeetham · 22MAT220**
+**Dhanush Naidu , Keerthan Reddy · Amrita Vishwa Vidyapeetham · 22MAT220**
 
 This is the current Optimization and Machine Learning version. It combines a working adaptive image codec with four reproducible numerical experiments. The codec asks which compression decisions deserve review. The numerical experiments ask how well a low-dimensional feature representation reconstructs held-out data and how closely independent solvers agree on the same mathematical problem.
 
