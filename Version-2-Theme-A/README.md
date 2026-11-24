@@ -9,7 +9,7 @@ This is the current Optimization and Machine Learning version. It combines a wor
 1. Download and extract the repository to a writable folder. In MATLAB, set **Current Folder** to `Version-2-Theme-A`.
 2. Run `run_project`. Tested with MATLAB R2026a on Windows, Statistics and Machine Learning Toolbox and Optimization Toolbox. The project includes an SSIM fallback for installations without Image Processing Toolbox.
 3. In **Six-image comparison**, inspect the original and five reconstructions. In **Image codec**, upload an image, select a method and compress. Save the .soc stream and reopen it to demonstrate independent decoding.
-4. Open **Theme A experiments**. The dropdown displays PCA, scratch SVM versus fitcsvm, saved CVXOPT results and Conjugate Gradient. **Re-run MATLAB experiments** recomputes the MATLAB outputs. Run Python separately to refresh CVXOPT.
+4. Open **Theme A experiments**. Choose **Analyze current uploaded image** to run the held-out PCA, SVM, primal QP, CG, and codec comparisons using the image currently loaded in **Image codec**. Results and reconstructed images are saved in a new `results/theme_a/user_runs/<timestamp>_<image-name>/` folder. **Re-run reference benchmark** restores the standard MATLAB example-image run in `results/theme_a/`.
 
 ## Follow one block through the compressor
 
@@ -42,7 +42,7 @@ At level 1 and scale 1 on the gallery sample, selective review checked **68 of 2
 | Real-image PCA and binary SVM | Blocks from MathWorks sample images `street1.jpg` and `ngc6543a.jpg`. Fit normalization on training rows. For the binary SVM, take up to 100 blocks per extreme class. | Use the whole held-out `peppers.png` image for PCA reconstruction. For the binary test, retain blocks labeled strong or light. |
 | Image smoothing by CG | Build the sparse linear system from the red channel of the peppers image. | Compare the custom solver against MATLAB pcg with the same zero initial guess and residual tolerance. |
 
-The synthetic scenes are included in [datasets](datasets/). MATLAB supplies the three real sample images; the [exported features](results/theme_a/real_blocks.csv) let readers inspect the actual measurements used by the course experiments.
+The synthetic scenes are included in [datasets](datasets/). MATLAB supplies the reference real sample images; the [exported features](results/theme_a/real_blocks.csv) let readers inspect the standard measurements used by the course experiments. A custom uploaded photo is used as a scene-level held-out image while the two reference images remain the training set. This avoids fitting and evaluating on the same photo. The original benchmark files are preserved; each custom run receives its own timestamped folder.
 
 ## Mathematics behind the four experiments
 
@@ -70,13 +70,27 @@ The binary held-out split contains 3,050 strong-compression blocks and one light
 
 ## Reproduce the results
 
-From this version folder, run in MATLAB:
+From this version folder, run the standard reference benchmark in MATLAB:
 
 ```matlab
 run_theme_a
 ```
 
-The script locates three MathWorks sample images in the MATLAB installation, computes seven features per block, exports the training and test matrices, and writes the PCA, SVM and CG results under `results/theme_a/`. The saved [block dataset](results/theme_a/real_blocks.csv) records the source image, block index and compression label.
+With no argument, the script locates the two MathWorks training images and the standard `peppers.png` held-out image, computes seven features per block, exports the training and test matrices, and writes PCA, SVM, MATLAB `quadprog`, CG, and codec results under `results/theme_a/`. The saved [block dataset](results/theme_a/real_blocks.csv) records the source image, block index and compression label.
+
+To run Theme A on the image currently shown in the app, use **Theme A experiments → Analyze current uploaded image**. The same operation is available from MATLAB with a path:
+
+```matlab
+run_theme_a('C:\\path\\to\\your\\photo.jpg')
+```
+
+The custom image becomes the held-out scene; training and feature scaling remain based on `street1.jpg` and `ngc6543a.jpg`. The run is saved separately under `results/theme_a/user_runs/` and includes `pca.csv`, `svm.csv`, `quadprog.csv`, `cg.csv`, convergence/PCA plots, a six-panel compression comparison, per-method reconstructions, compression metrics, and a copy of the input image. For very large photos, the CG smoothing demonstration downsamples its working image to at most 800 pixels on the longest side; the compression and block-feature experiments use the uploaded image at its original dimensions.
+
+If CVXOPT is installed, you can add its solver result to that custom run by passing the run folder to the Python script:
+
+```sh
+python theme_a_cvxopt.py "results/theme_a/user_runs/<timestamp>_<image-name>"
+```
 
 Then, from a terminal in the **same folder**, run:
 

@@ -1,11 +1,12 @@
 function fig=OptiCompressApp(root)
 % Desktop demonstration. The compressed stream can be opened in a fresh session.
 if nargin==0, root=setup(); end
+currentSourcePath='';
 fig=uifigure('Name','SVM-OptiCompress | Image compression laboratory','Position',[75 70 1090 720]);
 tabs=uitabgroup(fig); outer=uigridlayout(fig,[1 1]); tabs.Parent=outer;
 gallery=uitab(tabs,'Title','Six-image comparison');
 galleryLayout=tiledlayout(gallery,2,3,'TileSpacing','compact','Padding','compact');
-theme_a_panel(uitab(tabs,'Title','Theme A experiments'),root);
+theme_a_panel(uitab(tabs,'Title','Theme A experiments'),root,@currentSource);
 codec=uitab(tabs,'Title','Image codec'); learning=uitab(tabs,'Title','Block classifier');
 mathTab=uitab(tabs,'Title','Optimization & PCA'); perf=uitab(tabs,'Title','Rate comparisons');
 clusterTab=uitab(tabs,'Title','Clustering');
@@ -61,6 +62,7 @@ if isfile(fullfile(root,'models','compression_svm.mat')), model=get_model(root);
 refreshModel(); sample=dir(fullfile(root,'datasets','sample_images','*.png'));
 loadSource(fullfile(sample(1).folder,sample(1).name));
     function loadSource(path)
+        currentSourcePath=char(path);
         img=read_image(path); original=img; preview(orig,original,'Original');
         blockRow.Value=1; blockCol.Value=1;
         blockRow.Limits=[1 max(2,ceil(size(img,1)/8))];
@@ -80,6 +82,9 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
         draw_six_images(galleryLayout,original,model,level.Value,scale.Value);
         title(galleryLayout,sprintf('Compression comparison   |   Level %g   |   Scale %g',level.Value,scale.Value));
         tabs.SelectedTab=gallery;
+    end
+    function path=currentSource()
+        path=currentSourcePath;
     end
     function refreshModel()
         if isempty(model), modelText.Text='Model awaiting training'; return; end

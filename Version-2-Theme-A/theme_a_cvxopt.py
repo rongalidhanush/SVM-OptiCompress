@@ -1,10 +1,12 @@
 """Run after run_theme_a. Solve the identical linear soft-margin primal with CVXOPT."""
 from pathlib import Path
 import csv
+import sys
 import numpy as np
 from cvxopt import matrix, solvers
 
-out = Path(__file__).resolve().parent / "results" / "theme_a"
+out = (Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else
+       Path(__file__).resolve().parent / "results" / "theme_a")
 train, test = [np.loadtxt(out / f"svm_{split}.csv", delimiter=",") for split in ("train", "test")]
 X, y = train[:, :-1], train[:, -1]
 n, d = X.shape
