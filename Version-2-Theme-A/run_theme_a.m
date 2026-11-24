@@ -1,189 +1,274 @@
-function out=run_theme_a(testImagePath)
-% Theme A experiments. With no input, reproduce the packaged MATLAB-image benchmark.
-% With a path, use that image as a scene-level held-out test image and save a
-% complete run under results/theme_a/user_runs without replacing the benchmark.
+function out=run_theme_a(imageInput,level,scale,kClusters,lambda)
+% Analyze one uploaded photo end-to-end. If called without an image, prompt
+% the user to choose one. All fitted data and outputs come from that image.
 root=setup();
-referenceNames=["street1.jpg","ngc6543a.jpg"];
-referencePaths=[fullfile(matlabroot,'toolbox','matlab','demos',referenceNames(1)), ...
-    fullfile(matlabroot,'toolbox','matlab','demos',referenceNames(2))];
-isUserRun=nargin>0 && strlength(string(testImagePath))>0;
-if isUserRun
-    testImagePath=char(testImagePath);
-    assert(isfile(testImagePath),'Selected test image does not exist: %s',testImagePath);
-    [~,stem,ext]=fileparts(testImagePath);
-    safeStem=regexprep(stem,'[^A-Za-z0-9_-]','_');
-    runName=sprintf('%s_%s',datestr(now,'yyyymmdd_HHMMSS'),safeStem);
-    out=fullfile(root,'results','theme_a','user_runs',runName);
-    if ~isfolder(out), mkdir(out); end
-    testPath=string(testImagePath);
-    testName=string([stem ext]);
-else
-    out=fullfile(root,'results','theme_a');
-    testPath=fullfile(matlabroot,'toolbox','matlab','matlab_images','png','peppers.png');
-    testName="peppers.png";
+if nargin<1 || isempty(imageInput)
+    [name,folder]=uigetfile({'*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff','Image files'}, ...
+        'Choose the image for a complete Theme A analysis');
+    if isequal(name,0), out=""; return; end
+    imageInput=fullfile(folder,name);
 end
-if ~isfolder(out), mkdir(out); end
-paths=[referencePaths,testPath]; names=[referenceNames,testName];
-X=[]; labels=[]; scene=[]; block=[];
-for i=1:numel(paths)
-    img=read_image(paths(i)); b=image_blocks(img); count=size(b,2);
-    X=[X;block_features(b)]; labels=[labels;label_blocks(b)]; %#ok<AGROW>
-    scene=[scene;repmat(i,count,1)]; block=[block;(1:count)']; %#ok<AGROW>
-end
-tbl=array2table(X,'VariableNames',{'Mean','Std','Variance','EdgeDensity','GradientEnergy','Entropy','FrequencyEnergy'});
-tbl.Image=reshape(names(scene),[],1); tbl.BlockIndex=block; tbl.Class=labels;
-writetable(tbl,fullfile(out,'real_blocks.csv'));
+if nargin<2 || isempty(level), level=1; end
+if nargin<3 || isempty(scale), scale=1; end
+if nargin<4 || isempty(kClusters), kClusters=3; end
+if nargin<5 || isempty(lambda), lambda=32; end
+validateattributes(level,{'numeric'},{'scalar','real','finite','positive'});
+validateattributes(scale,{'numeric'},{'scalar','real','finite','positive'});
+validateattributes(lambda,{'numeric'},{'scalar','real','finite','nonnegative'});
 
-% Fit feature scaling and PCA only on the two reference training scenes.
-train=scene<3; mu=mean(X(train,:)); sd=std(X(train,:)); sd(sd==0)=1; Z=(X-mu)./sd;
-[V,d]=eig(cov(Z(train,:)),'vector'); [d,ix]=sort(d,'descend'); V=V(:,ix);
-err=zeros(7,1); ztest=Z(~train,:);
-for k=1:7
-    err(k)=norm(ztest-ztest*V(:,1:k)*V(:,1:k)','fro')/max(norm(ztest,'fro'),eps);
+if ischar(imageInput) || isstring(imageInput)
+    sourcePath=char(imageInput); assert(isfile(sourcePath),'Selected image does not exist.');
+    img=read_image(sourcePath); [~,stem,ext]=fileparts(sourcePath);
+else
+    sourcePath=''; img=read_image(imageInput); stem='uploaded_image'; ext='.png';
 end
-pcaTable=table((1:7)',100*cumsum(d)/sum(d),err,'VariableNames', ...
-    {'PCs','TrainCumulativePercent','TestRelativeError'});
+data=image_block_dataset(img,lambda,level,scale);
+assert(numel(data.Labels)>=2 && nnz(data.TrainMask)>=2 && any(data.TestMask), ...
+    'This photo needs at least two 8-by-8 blocks for the within-image train/test analysis.');
+
+safeStem=regexprep(stem,'[^A-Za-z0-9_-]','_');
+runName=sprintf('%s_%s',datestr(now,'yyyymmdd_HHMMSS'),safeStem);
+out=fullfile(root,'results','theme_a','user_runs',runName);
+if ~isfolder(out), mkdir(out); end
+
+% Preserve this exact input and record that every experiment below is local
+% to it. The held-out split is stratified over its block-cost labels.
+if ~isempty(sourcePath), copyfile(sourcePath,fullfile(out,['input_image' ext]));
+else, imwrite(img,fullfile(out,'input_image.png')); end
+metadata=table(string(sourcePath),string(stem),string(datetime('now')), ...
+    size(img,2),size(img,1),size(img,3),level,scale,lambda,kClusters, ...
+    'VariableNames',{'SourcePath','ImageName','RunTime','Width','Height','Channels','CompressionLevel','CompressionScale','RatePenalty','RequestedClusters'});
+writetable(metadata,fullfile(out,'run_metadata.csv'));
+
+% Save features and labels for every 8-by-8 block in this photo.
+featureNames={'Mean','Std','Variance','EdgeDensity','GradientEnergy','Entropy','FrequencyEnergy'};
+featureTable=array2table(data.Features,'VariableNames',featureNames);
+featureTable.BlockIndex=(1:numel(data.Labels))';
+featureTable.BlockRow=data.BlockRow; featureTable.BlockColumn=data.BlockCol;
+featureTable.QuantizationClass=data.Labels;
+featureTable.Split=repmat("train",numel(data.Labels),1); featureTable.Split(data.TestMask)="heldout";
+writetable(featureTable,fullfile(out,'block_features.csv'));
+
+% PCA is fitted and evaluated on separate blocks from the uploaded image.
+X=data.Features; train=data.TrainMask; test=data.TestMask;
+mu=mean(X(train,:),1); sd=std(X(train,:),0,1); sd(sd==0)=1;
+Z=(X-mu)./sd; Ztrain=Z(train,:); Ztest=Z(test,:);
+[V,eigenvalues]=eig(cov(Ztrain),'vector'); [eigenvalues,order]=sort(max(0,eigenvalues),'descend'); V=V(:,order);
+pcaError=zeros(7,1);
+for n=1:7
+    projected=Ztest*V(:,1:n)*V(:,1:n)';
+    pcaError(n)=norm(Ztest-projected,'fro')/max(norm(Ztest,'fro'),eps);
+end
+pcaTable=table((1:7)',100*cumsum(eigenvalues)/max(sum(eigenvalues),eps),pcaError, ...
+    'VariableNames',{'Components','TrainingVariancePercent','HeldOutRelativeError'});
 writetable(pcaTable,fullfile(out,'pca.csv'));
 fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
 tiledlayout(fig,1,2,'Padding','compact');
-nexttile; plot(1:7,pcaTable.TrainCumulativePercent,'-o'); xlabel('Components'); ylabel('Train variance (%)'); grid on;
-nexttile; semilogy(1:7,max(pcaTable.TestRelativeError,1e-15),'-o'); xlabel('Components'); ylabel('Held-out feature error'); grid on;
+nexttile; plot(1:7,pcaTable.TrainingVariancePercent,'-o'); xlabel('Components'); ylabel('Training variance (%)'); grid on;
+nexttile; semilogy(1:7,max(pcaError,1e-15),'-o'); xlabel('Components'); ylabel('Held-out feature error'); grid on;
+sgtitle(sprintf('PCA fitted on blocks from %s',stem),'Interpreter','none');
 exportgraphics(fig,fullfile(out,'pca_results.png')); clear guard;
 
-% Train on the same two fixed scenes; evaluate all eligible blocks in the
-% selected scene. This keeps the split by image and prevents scene leakage.
-ids=[];
-for cls=[1 3]
-    pool=find(train & labels==cls);
-    assert(~isempty(pool),'Missing training class %d.',cls);
-    ids=[ids;pool(round(linspace(1,numel(pool),min(100,numel(pool)))) )]; %#ok<AGROW>
+% Train the multi-class codec SVM on this photo and reserve held-out blocks.
+[model,~]=train_image_model(img,lambda,level,scale);
+save(fullfile(out,'image_svm_model.mat'),'model');
+binary=image_binary_split(data);
+if binary.Available
+    [w,bias,gaps]=scratch_svm(binary.TrainX,binary.TrainY);
+    lib=fitcsvm(binary.TrainX,binary.TrainY,'KernelFunction','linear', ...
+        'BoxConstraint',1,'Standardize',false);
+    predScratch=2*((binary.TestX*w+bias)>=0)-1;
+    predLibrary=predict(lib,binary.TestX);
+    if isempty(binary.TestY), accScratch=NaN; accLibrary=NaN;
+    else, accScratch=mean(predScratch==binary.TestY); accLibrary=mean(predLibrary==binary.TestY); end
+    objective=@(v,b) .5*(v'*v)+sum(max(0,1-binary.TrainY.*(binary.TrainX*v+b)));
+    svmTable=table(["Scratch dual";"MATLAB fitcsvm"], ...
+        [objective(w,bias);objective(lib.Beta,lib.Bias)],[accScratch;accLibrary], ...
+        repmat("trained from this image",2,1), ...
+        'VariableNames',{'Method','PrimalObjective','HeldOutAccuracy','Status'});
+    writematrix([binary.TrainX binary.TrainY],fullfile(out,'svm_train.csv'));
+    writematrix([binary.TestX binary.TestY],fullfile(out,'svm_test.csv'));
+    writematrix(gaps,fullfile(out,'svm_kkt_history.csv'));
+    writetable(table(["negative/non-positive class";"positive class"], ...
+        [nnz(binary.TestY<0);nnz(binary.TestY>0)],'VariableNames',{'HeldOutClass','Count'}), ...
+        fullfile(out,'svm_test_class_counts.csv'));
+qp=solve_image_qp(binary);
+    save(fullfile(out,'binary_svm_solution.mat'),'w','bias','lib','qp','binary');
+else
+    svmTable=table("Not applicable",NaN,NaN,string(binary.Reason), ...
+        'VariableNames',{'Method','PrimalObjective','HeldOutAccuracy','Status'});
+    writematrix(NaN,fullfile(out,'svm_kkt_history.csv'));
+    fid=fopen(fullfile(out,'svm_status.txt'),'w'); cleanup=onCleanup(@() fclose(fid));
+    fprintf(fid,'%s\n',binary.Reason); clear cleanup;
+    qp=solve_image_qp(binary);
 end
-A=Z(ids,:); y=labels(ids)-2;
-test=~train & labels~=2; B=Z(test,:); truth=labels(test)-2;
-[w,bias,gaps]=scratch_svm(A,y);
-lib=fitcsvm(A,y,'KernelFunction','linear','BoxConstraint',1,'Standardize',false);
-pred=2*((B*w+bias)>=0)-1; ref=predict(lib,B);
-cost=@(v,b) .5*(v'*v)+sum(max(0,1-y.*(A*v+b)));
-if isempty(truth), accScratch=NaN; accLibrary=NaN; else
-    accScratch=mean(pred==truth); accLibrary=mean((2*(ref>=0)-1)==truth);
-end
-summary=table(["scratch";"fitcsvm"],[cost(w,bias);cost(lib.Beta,lib.Bias)], ...
-    [accScratch;accLibrary],'VariableNames',{'Method','PrimalObjective','HeldOutAccuracy'});
-disp(summary); writetable(summary,fullfile(out,'svm.csv'));
-writematrix([A y],fullfile(out,'svm_train.csv')); writematrix([B truth],fullfile(out,'svm_test.csv'));
-writematrix(gaps,fullfile(out,'svm_kkt_history.csv'));
-counts=table(["strong";"light"],[nnz(truth==1);nnz(truth==-1)], ...
-    'VariableNames',{'HeldOutClass','Count'});
-writetable(counts,fullfile(out,'svm_test_class_counts.csv'));
-if gaps(end)>=1e-4, warning('Scratch SVM stopped with KKT violation %.3g.',gaps(end)); end
+writetable(svmTable,fullfile(out,'svm.csv'));
+qpSummary=rmfield(qp,intersect(fieldnames(qp),{'Weights','Bias','Slacks'}));
+writetable(struct2table(qpSummary),fullfile(out,'quadprog.csv'));
+write_svm_figures(binary,qp,out,stem);
+classValues=(1:3)';
+writetable(table(classValues,arrayfun(@(c)nnz(data.Labels==c),classValues), ...
+    arrayfun(@(c)nnz(data.Labels(data.TrainMask)==c),classValues), ...
+    arrayfun(@(c)nnz(data.Labels(data.TestMask)==c),classValues), ...
+    'VariableNames',{'QuantizationClass','AllBlocks','TrainingBlocks','HeldOutBlocks'}), ...
+    fullfile(out,'class_distribution.csv'));
 
-% Re-solve the identical primal QP in MATLAB so this run has a QP result even
-% when the optional Python/CVXOPT dependency is not installed.
-qp=solve_primal_qp(A,y,B,truth);
-writetable(struct2table(qp),fullfile(out,'quadprog.csv'));
+% Clustering, transition probabilities and rate-distortion costs for every
+% block are computed from the same uploaded image.
+[clusterMap,clusterProfile,clusterCost]=cluster_blocks(img,kClusters);
+writetable(clusterProfile,fullfile(out,'cluster_profile.csv'));
+writematrix(clusterMap,fullfile(out,'cluster_map.csv'));
+[transitionProbability,transitionCounts]=spatial_transitions(clusterMap);
+writematrix(transitionProbability,fullfile(out,'spatial_transition_probabilities.csv'));
+writematrix(transitionCounts,fullfile(out,'spatial_transition_counts.csv'));
+write_cluster_figures(clusterMap,transitionProbability,out,stem);
+save_block_cost_outputs(data,out,lambda,level,scale);
+writetable(table(clusterCost,height(clusterProfile),numel(data.Labels), ...
+    'VariableNames',{'WithinClusterSumSquares','NumberOfClusters','NumberOfBlocks'}), ...
+    fullfile(out,'clustering_summary.csv'));
 
-% CG smoothing uses the selected image's first channel. Bound the linear
-% system size for large camera photos and record the actual CG dimensions.
-img=read_image(testPath); originalSize=size(img); cgImg=img;
-resizeFactor=min(1,800/max(size(img,1),size(img,2)));
-if resizeFactor<1
-    rowIndex=round(linspace(1,size(img,1),max(1,round(size(img,1)*resizeFactor))));
-    colIndex=round(linspace(1,size(img,2),max(1,round(size(img,2)*resizeFactor))));
-    cgImg=img(rowIndex,colIndex,:);
+% CG works on this photo's red/grayscale channel; large images are sampled
+% only for the sparse linear solve to bound memory use.
+save_cg_outputs(img,out);
+save_codec_outputs(img,model,out,level,scale);
+
+% Rate-distortion curves use five operating points per codec on this photo.
+levels=[.55 1 2 4.5 7];
+[rateTable,matchedTable]=compare_methods(img,model,[],levels,scale);
+writetable(rateTable,fullfile(out,'rate_curves.csv'));
+writetable(matchedTable,fullfile(out,'matched_rates.csv'));
+write_rate_figure(rateTable,out,stem);
+fprintf('Image-specific Theme A results saved to: %s\n',out);
 end
-f=double(cgImg(:,:,1)); [h,n]=size(f);
-difference=@(k) diff(speye(k),1,1);
-Dh=difference(h); Dw=difference(n);
-M=speye(h*n)+8*(kron(speye(n),Dh'*Dh)+kron(Dw'*Dw,speye(h)));
-rhs=f(:); x=zeros(size(rhs)); res=rhs; p=res; rr=res'*res; history=1;
-for iter=1:500
-    Mp=M*p; step=rr/(p'*Mp); x=x+step*p; res=res-step*Mp;
-    next=res'*res; history(end+1)=sqrt(next)/max(norm(rhs),eps); %#ok<AGROW>
+
+function write_svm_figures(binary,qp,out,name)
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+if isfile(fullfile(out,'svm_kkt_history.csv')) && binary.Available
+    gaps=readmatrix(fullfile(out,'svm_kkt_history.csv'));
+    semilogy(0:numel(gaps)-1,max(gaps,eps)); xlabel('Pair updates'); ylabel('KKT violation'); grid on;
+    title(sprintf('Image-derived SVM convergence: %s',name),'Interpreter','none');
+else
+    axis off; text(.05,.5,'Binary SVM not applicable: this image does not contain two usable classes.','Units','normalized');
+end
+exportgraphics(fig,fullfile(out,'svm_convergence.png')); clear guard;
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+if binary.Available && isfield(qp,'Weights') && ~isempty(binary.TestY)
+    margins=binary.TestY.*(binary.TestX*qp.Weights+qp.Bias);
+    stem(1:numel(margins),margins,'filled'); yline(1,'k--'); grid on;
+    xlabel('Held-out block'); ylabel('Signed functional margin');
+    title(sprintf('Image-derived QP margins: %s',name),'Interpreter','none');
+else
+    axis off; text(.05,.5,'QP margins unavailable because the image split lacks two classes.','Units','normalized');
+end
+exportgraphics(fig,fullfile(out,'svm_qp_margins.png')); clear guard;
+end
+
+function save_block_cost_outputs(data,out,lambda,level,scale)
+[chosen,detail]=label_blocks(data.Blocks,lambda,level,scale); n=numel(chosen);
+bits=8*detail.bytes/64;
+T=table((1:n)',data.BlockRow,data.BlockCol,chosen, ...
+    detail.mse(:,1),detail.mse(:,2),detail.mse(:,3), ...
+    detail.bytes(:,1),detail.bytes(:,2),detail.bytes(:,3), ...
+    bits(:,1),bits(:,2),bits(:,3),detail.cost(:,1),detail.cost(:,2),detail.cost(:,3), ...
+    'VariableNames',{'BlockIndex','BlockRow','BlockColumn','ChosenClass', ...
+    'StrongMSE','ModerateMSE','LightMSE','StrongBytes','ModerateBytes','LightBytes', ...
+    'StrongBPP','ModerateBPP','LightBPP','StrongCost','ModerateCost','LightCost'});
+writetable(T,fullfile(out,'block_costs.csv'));
+grid=reshape(chosen,data.Grid); writematrix(grid,fullfile(out,'block_cost_map.csv'));
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+imagesc(grid,[1 3]); axis image; colorbar; colormap([.12 .36 .68;.97 .72 .25;.78 .23 .27]);
+title('Chosen rate-distortion class per image block'); xlabel('Block column'); ylabel('Block row');
+exportgraphics(fig,fullfile(out,'block_cost_map.png')); clear guard;
+end
+
+function write_cluster_figures(groups,prob,out,name)
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+tiledlayout(fig,1,2,'Padding','compact');
+nexttile; imagesc(groups); axis image; colorbar; title('Block cluster map','Interpreter','none');
+xlabel('Block column'); ylabel('Block row');
+nexttile; imagesc(prob,[0 1]); axis image; colorbar; xticks(1:size(prob,1)); yticks(1:size(prob,1));
+xlabel('Right-neighbor cluster'); ylabel('Current cluster'); title('Spatial transition probability');
+sgtitle(sprintf('Clustering and transitions: %s',name),'Interpreter','none');
+exportgraphics(fig,fullfile(out,'clustering_transitions.png')); clear guard;
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+imagesc(prob,[0 1]); axis image; colorbar; xticks(1:size(prob,1)); yticks(1:size(prob,1));
+xlabel('Right-neighbor cluster'); ylabel('Current cluster'); title('Spatial transition probabilities');
+exportgraphics(fig,fullfile(out,'spatial_transitions.png')); clear guard;
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+imagesc(groups); axis image; colorbar; title('Cluster assignment for each 8-by-8 block','Interpreter','none');
+exportgraphics(fig,fullfile(out,'cluster_map.png')); clear guard;
+end
+
+function save_cg_outputs(img,out)
+originalSize=size(img); cgImage=img; factor=min(1,800/max(size(img,1),size(img,2)));
+if factor<1
+    r=round(linspace(1,size(img,1),max(1,round(size(img,1)*factor))));
+    c=round(linspace(1,size(img,2),max(1,round(size(img,2)*factor))));
+    cgImage=img(r,c,:); imwrite(cgImage,fullfile(out,'cg_input_resized.png'));
+end
+f=double(cgImage(:,:,1)); [h,w]=size(f); Dh=diff(speye(h)); Dw=diff(speye(w));
+M=speye(h*w)+8*(kron(speye(w),Dh'*Dh)+kron(Dw'*Dw,speye(h)));
+rhs=f(:); x=zeros(size(rhs)); residual=rhs; direction=residual; rr=residual'*residual; history=1;
+for it=1:500
+    Md=M*direction; alpha=rr/(direction'*Md); x=x+alpha*direction; residual=residual-alpha*Md;
+    next=residual'*residual; history(end+1)=sqrt(next)/max(norm(rhs),eps); %#ok<AGROW>
     if history(end)<1e-8, break; end
-    p=res+(next/rr)*p; rr=next;
+    direction=residual+(next/rr)*direction; rr=next;
 end
-[xref,flag,~,it,base]=pcg(M,rhs,1e-8,500);
-actual=norm(M*x-rhs)/max(norm(rhs),eps); relative=norm(x-xref)/max(norm(xref),eps);
-assert(flag==0 && actual<1.1e-8 && relative<1e-6,'CG comparison failed to meet tolerance.');
-writetable(table(h*n,nnz(M),iter,it,actual,relative,originalSize(2),originalSize(1),n,h,resizeFactor, ...
-    'VariableNames',{'Unknowns','Nonzeros','ScratchIterations','PcgIterations','RelativeResidual', ...
-    'DifferenceFromPcg','OriginalWidth','OriginalHeight','CGWidth','CGHeight','CGScale'}), ...
-    fullfile(out,'cg.csv'));
-writematrix(history(:),fullfile(out,'cg_residual.csv'));
-smoothed=uint8(min(255,max(0,reshape(x,h,n))));
-imwrite(smoothed,fullfile(out,'cg_smoothed_channel.png'));
-if resizeFactor<1, imwrite(cgImg,fullfile(out,'cg_input_resized.png')); end
-fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig)); tiledlayout(fig,1,2);
-nexttile; semilogy(0:numel(gaps)-1,max(gaps,eps)); xlabel('Pair updates'); ylabel('SVM KKT violation'); grid on;
-nexttile; semilogy(0:iter,history,'-',0:it,base/max(norm(rhs),eps),'--'); xlabel('Iteration'); ylabel('Relative residual'); legend('Scratch CG','MATLAB pcg'); grid on;
-exportgraphics(fig,fullfile(out,'convergence.png')); clear guard;
-
-if isUserRun
-    copyfile(testPath,fullfile(out,['input_image' ext]));
-    metadata=table(string(testPath),string(datetime('now')),size(img,2),size(img,1),size(img,3), ...
-        'VariableNames',{'SourcePath','RunTime','Width','Height','Channels'});
-    writetable(metadata,fullfile(out,'run_metadata.csv'));
-end
-save_codec_outputs(img,root,out);
-fprintf('Theme A results saved to: %s\n',out);
+[reference,flag,~,pcgIterations,pcgHistory]=pcg(M,rhs,1e-8,500);
+relres=norm(M*x-rhs)/max(norm(rhs),eps); delta=norm(x-reference)/max(norm(reference),eps);
+cgTable=table(h*w,nnz(M),it,pcgIterations,relres,delta, ...
+    originalSize(2),originalSize(1),w,h,factor, ...
+    'VariableNames',{'Unknowns','Nonzeros','CustomCGIterations','PcgIterations', ...
+    'RelativeResidual','DifferenceFromPcg','OriginalWidth','OriginalHeight','CGWidth','CGHeight','CGScale'});
+writetable(cgTable,fullfile(out,'cg.csv')); writematrix(history(:),fullfile(out,'cg_residual.csv'));
+imwrite(uint8(min(255,max(0,reshape(x,h,w)))),fullfile(out,'cg_smoothed_channel.png'));
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+semilogy(0:numel(history)-1,history,'-',0:numel(pcgHistory)-1,pcgHistory,'--');
+xlabel('Iteration'); ylabel('Relative residual'); legend('Custom CG','MATLAB pcg'); grid on;
+title('Smoothing solve from uploaded image'); exportgraphics(fig,fullfile(out,'cg_convergence.png')); clear guard;
 end
 
-function q=solve_primal_qp(X,y,testX,testY)
-[n,d]=size(X); H=spdiags([ones(d,1);0;zeros(n,1)],0,d+n+1,d+n+1);
-f=[zeros(d+1,1);ones(n,1)];
-A=[-spdiags(y,0,n,n)*X,-y,-speye(n)]; rhs=-ones(n,1);
-lb=[-inf(d+1,1);zeros(n,1)];
-opts=optimoptions('quadprog','Display','off','ConstraintTolerance',1e-9,'OptimalityTolerance',1e-9);
-[z,obj,flag,output]=quadprog(H,f,A,rhs,[],[],lb,[],[],opts);
-assert(flag>0,'MATLAB quadprog did not converge.');
-if isempty(testY), accuracy=NaN; else
-    accuracy=mean((testX*z(1:d)+z(d+1)>=0)==(testY>0));
-end
-violation=max([0;A*z-rhs;-z(d+2:end)]);
-q=struct('Status',"optimal",'Objective',obj,'HeldOutAccuracy',accuracy, ...
-    'MaxViolation',violation,'Iterations',output.iterations);
-end
-
-function save_codec_outputs(img,root,out)
-model=get_model(root); methods=["Fixed","Rules","SVM","Selective SVM","Exhaustive"];
+function save_codec_outputs(img,model,out,level,scale)
+methods=["Fixed","Rules","SVM","Selective SVM","Exhaustive"];
 tmp=[tempname '.soc']; cleaner=onCleanup(@() remove_stream(tmp));
-rows=table(); reconstructions=cell(numel(methods),1); labels=strings(numel(methods)+1,1);
-labels(1)="Original"; reconstructions{1}=img;
-for k=1:numel(methods)
-    [~,enc,review]=compress_image(img,tmp,methods(k),1,1,model);
-    [rec,~,dec]=decompress_image(tmp); m=image_metrics(img,rec,tmp,enc,dec);
-    row=table(methods(k),m.Bytes,m.BPP,m.PSNR,m.SSIM,m.MSE,enc,dec, ...
-        'VariableNames',{'Method','Bytes','BPP','PSNR','SSIM','MSE','Encode_s','Decode_s'});
-    if methods(k)=="Selective SVM"
-        row.Reviewed=review.checked; row.DecisionsChanged=review.changed;
-    else
-        row.Reviewed=NaN; row.DecisionsChanged=NaN;
-    end
-    rows=[rows;row]; %#ok<AGROW>
-    reconstructions{k+1}=rec; labels(k+1)=methods(k);
-    imwrite(rec,fullfile(out,sprintf('reconstruction_%s.png',lower(regexprep(methods(k),'[^A-Za-z0-9]','_')))));
+rows=table(); reconstructions=cell(numel(methods)+1,1); labels=strings(numel(methods)+1,1);
+reconstructions{1}=img; labels(1)="Original";
+for i=1:numel(methods)
+    [~,enc,review]=compress_image(img,tmp,methods(i),level,scale,model);
+    [rec,~,dec]=decompress_image(tmp); metric=image_metrics(img,rec,tmp,enc,dec);
+    row=table(methods(i),level,scale,metric.Bytes,metric.BPP,metric.PSNR,metric.SSIM,metric.MSE,enc,dec, ...
+        'VariableNames',{'Method','Level','Scale','Bytes','BPP','PSNR','SSIM','MSE','Encode_s','Decode_s'});
+    row.Reviewed=review.checked; row.DecisionsChanged=review.changed; rows=[rows;row]; %#ok<AGROW>
+    reconstructions{i+1}=rec; labels(i+1)=methods(i);
+    imwrite(rec,fullfile(out,sprintf('reconstruction_%s.png',lower(regexprep(methods(i),'[^A-Za-z0-9]','_')))));
 end
 writetable(rows,fullfile(out,'compression_metrics.csv'));
 fig=figure('Visible','off','Color','w','Position',[100 100 1200 720]); guard=onCleanup(@() close(fig));
 tiledlayout(fig,2,3,'TileSpacing','compact','Padding','compact');
-for k=1:numel(reconstructions)
+for i=1:numel(reconstructions)
     ax=nexttile;
-    if size(reconstructions{k},3)==1, imagesc(ax,reconstructions{k},[0 255]); colormap(ax,gray(256)); else, image(ax,reconstructions{k}); end
+    if size(reconstructions{i},3)==1, imagesc(ax,reconstructions{i},[0 255]); colormap(ax,gray(256)); else, image(ax,reconstructions{i}); end
     axis(ax,'image','off');
-    if k==1, title(ax,'Original'); else
-        title(ax,sprintf('%s | %d B | %.2f dB | SSIM %.3f',labels(k),rows.Bytes(k-1),rows.PSNR(k-1),rows.SSIM(k-1)), ...
+    if i==1, title(ax,'Uploaded original'); else
+        title(ax,sprintf('%s | %d B | %.2f dB | SSIM %.3f',labels(i),rows.Bytes(i-1),rows.PSNR(i-1),rows.SSIM(i-1)), ...
             'Interpreter','none','FontSize',9);
     end
 end
 exportgraphics(fig,fullfile(out,'compression_comparison.png'),'Resolution',180); clear guard;
 end
 
-function remove_stream(path)
-if isfile(path), delete(path); end
+function write_rate_figure(T,out,name)
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig)); hold on;
+for method=unique(T.Method,'stable')'
+    R=sortrows(T(T.Method==method,:),'BPP'); plot(R.BPP,R.PSNR,'-o','DisplayName',char(method));
+end
+hold off; xlabel('Bits per pixel'); ylabel('PSNR (dB)'); legend('Location','best'); grid on;
+title(sprintf('Rate-distortion curves for %s',name),'Interpreter','none');
+exportgraphics(fig,fullfile(out,'rate_distortion.png')); clear guard;
 end
 
 function [w,b,gaps]=scratch_svm(X,y)
-% Dual pair-coordinate ascent. Updating by (+y_i,-y_j) preserves y'alpha=0.
 C=1; a=zeros(size(y)); w=zeros(size(X,2),1); gaps=zeros(200001,1);
 for t=1:numel(gaps)
     score=y-X*w;
@@ -194,8 +279,12 @@ for t=1:numel(gaps)
     if gaps(t)<1e-5, break; end
     di=C-a(i); if y(i)<0, di=a(i); end
     dj=a(j); if y(j)<0, dj=C-a(j); end
-    delta=X(i,:)'-X(j,:)'; s=min([di,dj,(v-u)/max(eps,delta'*delta)]);
-    a(i)=a(i)+y(i)*s; a(j)=a(j)-y(j)*s; w=w+s*delta;
+    delta=X(i,:)'-X(j,:)'; step=min([di,dj,(v-u)/max(eps,delta'*delta)]);
+    a(i)=a(i)+y(i)*step; a(j)=a(j)-y(j)*step; w=w+step*delta;
 end
 gaps=gaps(1:t); b=(v+u)/2;
+end
+
+function remove_stream(path)
+if isfile(path), delete(path); end
 end

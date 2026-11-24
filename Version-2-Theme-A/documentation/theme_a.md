@@ -1,35 +1,61 @@
-# Theme A evidence guide · 22MAT220
-## Reproduce the course experiments
-From the project root in MATLAB, run `run_theme_a` to reproduce the standard reference-image benchmark. To evaluate a custom held-out photo, run `run_theme_a('C:\\path\\to\\photo.jpg')`, or upload it in the app and choose **Theme A experiments → Analyze current uploaded image**. The custom run is written to a unique `results/theme_a/user_runs/<timestamp>_<image-name>/` folder; it does not replace the reference results. Each custom output includes feature/PCA/SVM/QP/CG tables, convergence plots, a six-panel codec comparison, per-method reconstructions, and compression metrics. The app compares MATLAB `quadprog` on the same primal QP; the optional CVXOPT command below remains a separate backend comparison.
+# Theme A: uploaded-image analysis
 
-In a Python 3 environment install NumPy and CVXOPT (`python -m pip install numpy cvxopt==1.3.2`) and run `python theme_a_cvxopt.py` from the project root to reproduce the saved reference CVXOPT result. To solve the QP for a custom run, pass its folder: `python theme_a_cvxopt.py "results/theme_a/user_runs/<run-folder>"`. The desktop compressor runs independently with `run_project`.
+Theme A now analyzes one user-selected photo end to end. The active app flow does not load the old MATLAB sample-photo split or a stored SVM model. Features, rate-distortion labels, training/test blocks, PCA, SVM/QP, CG, clustering, transitions, block costs, and codec figures all come from the selected image.
 
-## Dataset and protocol
-The reference run uses street1.jpg and ngc6543a.jpg from the MATLAB demos collection, and peppers.png from the MATLAB sample image collection. A custom run retains the two reference training images and substitutes the selected user image as the entire held-out scene. One row of real_blocks.csv represents one padded 8 × 8 spatial block. The seven feature columns follow the project's existing feature extractor. Class 1/2/3 comes from the existing minimum rate–distortion cost rule. Scene and block index identify each row. Custom input images are copied into their run folder so the associated outputs can be identified and reproduced.
+## Run it
 
-Fit feature scaling and covariance only on the street and nebula images. Hold out the entire peppers photo. For the binary SVM benchmark select up to 100 training blocks per extreme class by deterministic evenly spaced indices, then evaluate every strong/light block in the held-out image. Exported SVM matrices contain seven standardized features followed by −1/+1. The three-class desktop model and its earlier synthetic benchmark have a different training protocol. Use separate labels and denominators in slides.
+In MATLAB, set Current Folder to the project root and run `run_project`. Upload a photo under **Image codec**, then click **Theme A experiments → Analyze current uploaded image**. To run from the command window, use `run_theme_a` and select a photo in the dialog, or call:
 
-## Four demonstrations
-1. **PCA on real data.** Form the standardized training matrix Z and diagonalize ZᵀZ/(n−1). The first k eigenvectors maximize retained variance among orthonormal k-dimensional projections. Compare held-out Z with ZVₖVₖᵀ using relative Frobenius error. Read pca.csv from k=1 to k=7. This reconstructs block features; pixel compression uses the DCT.
-2. **Constrained convex optimization.** Minimize ½‖w‖² + Σξ subject to yᵢ(xᵢᵀw+b) ≥ 1−ξᵢ and ξᵢ ≥ 0. With variables [w,b,ξ], P=diag(I,0,0) is positive semidefinite and both sets of inequalities are affine. CVXOPT solves this primal directly. In cvxopt.csv use solver status, objective, maximum violation and duality gap to establish feasibility and optimality within numerical tolerance.
-3. **SVM from scratch and library baseline.** The dual maximizes Σα−½‖Σαᵢyᵢxᵢ‖² with 0≤α≤1 and yᵀα=0. The custom solver selects the pair with the greatest feasible KKT violation. Updating by t(yᵢ,−yⱼ) preserves equality, and clipping t preserves the box. The quadratic along the pair has curvature ‖xᵢ−xⱼ‖². Its stationary step is the score-gap divided by curvature. The stopping gap and intercept follow from the bound on feasible bias values. Compare the custom primal objective and test accuracy with linear fitcsvm and CVXOPT on identical rows, C=1 and identical scaling. Show convergence.png and svm_kkt_history.csv.
-4. **Krylov subspace method.** On the held-out red channel minimize ½‖u−f‖² + 4‖Du‖² for nearest-neighbour differences D. Differentiating gives (I+8DᵀD)u=f. For any nonzero v, vᵀMv=‖v‖²+8‖Dv‖²>0, so CG applies. The kth approximation lies in the initial guess plus span(r₀,Mr₀,…,Mᵏ⁻¹r₀). Store M sparsely. Compare custom CG with MATLAB pcg at the same tolerance and initial guess. Show system size, nonzeros, final true residual, iteration counts and difference between solutions from cg.csv. This smoothing experiment accompanies the codec; it is not a decoding step.
+```matlab
+run_theme_a('C:\\path\\to\\photo.jpg')
+```
 
-## Presentation and marking plan
-| Rubric | What the group should present | Evidence |
-|---|---|---|
-| Mathematical depth · 25% | Derive the PCA objective, SVM dual pair update and positive definiteness of the CG system. Explain assumptions and stopping criteria. | Four demonstrations above; QP tab for support vectors and KKT checks. |
-| Implementation and results · 25% | Identify data sources, image split and class filtering. Reproduce the CVXOPT, fitcsvm and pcg comparisons. Interpret convergence and failure cases. | Real data CSV, solver tables, convergence plot and both commands. |
-| Literature review and novelty · 15% | Critically compare 5–7 relevant papers/references. Explain where selective review differs from standard methods. Distinguish a project extension from a verified research novelty claim. | Literature synthesis and citations still require author review. |
-| Report quality · 15% | Prepare the IEEE/Springer-style report with clearly labelled figures, equations and baseline comparisons. | Required report outline below. |
-| Presentation and viva · 20% | Start with the problem, trace one block, show real-data PCA, compare the three SVM solvers, show CG convergence, then interpret codec results and limitations. Each member demonstrates and answers for their own contribution. | Existing app, new experiments, updated slides still to prepare. |
+The operation creates a unique folder under `results/theme_a/user_runs/`, named with the run time and input image name. It preserves the uploaded file and writes all outputs into that folder so separate photos never overwrite one another.
 
-## Submission items to complete later
-The report needs a title page with group details, roll numbers, course code and date; a 200–250 word abstract; introduction (1–1.5 pages); literature review (1–2); mathematical formulation (2–3); methodology (2–3); results/discussion (2–3); conclusion (0.5–1); IEEE references and optional appendix. Deliver report PDF, source with README, dataset/access instructions, and presentation PDF/PPT. The group must verify citations, document actual contributions and sign the statement. The course also requests an institutional similarity report with plagiarism similarity below 10% and AI similarity below 20%. Only the authorized checker can supply those results. The grading rubric is an assessment guide, not a guaranteed mark.
+## Image-local protocol
 
-## Verified run and interpretation
-- PCA: the first three PCs retained 91.985% of training variance. On held-out feature rows, three PCs gave relative reconstruction error 0.3265, versus 0.0910 with five.
-- SVM: scratch primal objective 66.936, fitcsvm 66.940 and CVXOPT 66.93627. CVXOPT reported optimal in 13 iterations with duality gap 9.76e-6 and no positive inequality violation at reported precision.
-- The held-out binary subset has 3,050 strong blocks and only one light block. Each solver scored 99.967%, exactly the accuracy of always predicting strong. The evidence supports numerical agreement on this optimization problem. Predictive generalization requires more independent images and stronger minority-class coverage. The ordinary three-class compressor benchmark remains separate.
-- CG: 196,608 unknowns and 981,248 nonzeros. Both algorithms reached tolerance in 72 iterations. The independently recomputed relative residual was 7.86e-9. The residual is measured in the original pixel system; the SVM convergence curve instead measures dual KKT violation.
-- Custom-image run: PCA and SVM use the same reference training split and replace only the held-out scene; MATLAB `quadprog` recomputes the primal QP on the saved training rows, and the CG and codec figures are built from the selected image. For large uploads, only the CG smoothing input is sampled down to an 800-pixel maximum dimension to keep the sparse solve practical. Read `run_metadata.csv` and the `CGScale` field in `cg.csv` for the actual dimensions.
+The input is converted to 8-bit grayscale/RGB and padded into 8 × 8 blocks. Seven luminance features and the three candidate quantization costs are calculated for every block. A deterministic within-image split reserves every fifth occurrence within each derived cost class for evaluation; other blocks train the models. This means training and held-out blocks all come from the same uploaded photo. Neighboring image blocks may be correlated, so these metrics describe that photo and do not prove performance on other photos.
+
+PCA standardization and covariance are fitted on the training blocks, and the held-out feature rows are reconstructed with the first k principal components. The codec SVM learns the image's quantization labels from its training blocks. The binary scratch-SVM and QP comparison uses the highest class present as the positive class and the remaining classes as negative. It is marked not applicable if the photo does not contain both classes in the training split. CVXOPT is optional; MATLAB `quadprog` runs in the main analysis.
+
+The CG demonstration constructs the sparse system
+
+\[
+(I+8D^\mathsf{T}D)u=f
+\]
+
+from the uploaded photo's red (or grayscale) channel. If the image exceeds 800 pixels on its longest dimension, the CG input alone is sampled down to that limit to bound memory. `cg.csv` records both original and solver dimensions. The compression and block feature calculations use the original resolution.
+
+## Files written for each image
+
+| Output | Contents |
+|---|---|
+| `input_image.*`, `run_metadata.csv` | Input copy, dimensions, source path and settings. |
+| `block_features.csv`, `class_distribution.csv` | Seven features, quantization label, block coordinates, split, and per-class counts for every image block. |
+| `pca.csv`, `pca_results.png` | Image-specific training variance and held-out feature reconstruction error. |
+| `svm.csv`, `svm_train.csv`, `svm_test.csv`, `svm_convergence.png` | Scratch SVM and `fitcsvm` results, binary data when available, and KKT history. |
+| `quadprog.csv`, `svm_qp_margins.png` | Image-specific primal QP status, objective, feasibility, test accuracy, and margin plot. |
+| `cg.csv`, `cg_residual.csv`, `cg_convergence.png`, `cg_smoothed_channel.png` | Sparse system size, iterations, residual history and smoothing result. |
+| `cluster_profile.csv`, `cluster_map.csv`, `cluster_map.png` | Cluster summaries and each block's cluster assignment. |
+| `spatial_transition_counts.csv`, `spatial_transition_probabilities.csv`, `spatial_transitions.png` | Observed horizontal transitions and conditional probabilities. |
+| `block_costs.csv`, `block_cost_map.csv`, `block_cost_map.png` | All three quantizer costs and the selected class for every block. |
+| `compression_metrics.csv`, `compression_comparison.png`, `reconstruction_*.png` | Original plus five codecs and per-method quality/size/timing metrics at the selected level and scale. |
+| `rate_curves.csv`, `matched_rates.csv`, `rate_distortion.png` | Rate/quality comparisons for the uploaded photo. |
+| `image_svm_model.mat`, `binary_svm_solution.mat` | Models and solver variables for reproducibility. |
+
+The Theme A tab dropdown displays each result table and its matching graph/map. The existing app tabs also remain image-specific: the six-image gallery updates after upload, PCA/optimization controls operate on the current image model, and clustering/transitions/block-cost controls use the currently loaded image.
+
+## Optional CVXOPT run
+
+Install NumPy and CVXOPT, then run the solver on the custom run folder:
+
+```sh
+python -m pip install numpy cvxopt==1.3.2
+python theme_a_cvxopt.py "results/theme_a/user_runs/<timestamp>_<image-name>"
+```
+
+The Python solver writes `cvxopt.csv` in that same folder. It requires a valid two-class SVM split; otherwise use the saved `quadprog.csv` status explaining why the binary formulation was not applicable.
+
+## Interpretation
+
+The “training variance” curve is fitted from the uploaded photo's training blocks, not from a library sample image. SVM objective values describe the uploaded photo's training split. Held-out accuracy describes its reserved blocks and should be reported with `class_distribution.csv`. The clustering and rate-distortion outputs describe the same input image. Keep the separate synthetic codec pilot in `results/metrics/` identified as its own experiment; it is not substituted for an uploaded-image result.

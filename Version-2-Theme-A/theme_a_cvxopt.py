@@ -7,7 +7,9 @@ from cvxopt import matrix, solvers
 
 out = (Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else
        Path(__file__).resolve().parent / "results" / "theme_a")
-train, test = [np.loadtxt(out / f"svm_{split}.csv", delimiter=",") for split in ("train", "test")]
+train, test = [np.loadtxt(out / f"svm_{split}.csv", delimiter=",", ndmin=2) for split in ("train", "test")]
+if train.shape[1] < 2 or train.shape[0] == 0 or test.shape[0] == 0:
+    raise SystemExit("This image run does not contain a valid binary SVM train/test split.")
 X, y = train[:, :-1], train[:, -1]
 n, d = X.shape
 P = np.diag(np.r_[np.ones(d), np.zeros(n + 1)])

@@ -6,7 +6,7 @@ fig=uifigure('Name','SVM-OptiCompress | Image compression laboratory','Position'
 tabs=uitabgroup(fig); outer=uigridlayout(fig,[1 1]); tabs.Parent=outer;
 gallery=uitab(tabs,'Title','Six-image comparison');
 galleryLayout=tiledlayout(gallery,2,3,'TileSpacing','compact','Padding','compact');
-theme_a_panel(uitab(tabs,'Title','Theme A experiments'),root,@currentSource);
+themeAReset=theme_a_panel(uitab(tabs,'Title','Theme A experiments'),root,@currentSettings);
 codec=uitab(tabs,'Title','Image codec'); learning=uitab(tabs,'Title','Block classifier');
 mathTab=uitab(tabs,'Title','Optimization & PCA'); perf=uitab(tabs,'Title','Rate comparisons');
 clusterTab=uitab(tabs,'Title','Clustering');
@@ -26,15 +26,15 @@ rg=uigridlayout(rdTab,[4 1]); rg.RowHeight={38,'1x',125,50};
 rc=uigridlayout(rg,[1 6]); rc.Padding=0; rc.ColumnWidth={80,70,105,70,160,90};
 uilabel(rc,'Text','Block row'); blockRow=uispinner(rc,'Limits',[1 Inf],'RoundFractionalValues','on','ValueChangedFcn',@blockCost);
 uilabel(rc,'Text','Block column'); blockCol=uispinner(rc,'Limits',[1 Inf],'RoundFractionalValues','on','ValueChangedFcn',@blockCost);
-uilabel(rc,'Text','Rate penalty (lambda)'); penalty=uispinner(rc,'Limits',[0 1024],'Value',32,'Step',8,'ValueChangedFcn',@blockCost,'Tag','RatePenalty');
+uilabel(rc,'Text','Rate penalty (lambda)'); penalty=uispinner(rc,'Limits',[0 1024],'Value',32,'Step',8,'ValueChangedFcn',@settingsChanged,'Tag','RatePenalty');
 blockAx=uiaxes(rg); candidateTable=uitable(rg,'Tag','BlockCosts');
 costText=uilabel(rg,'WordWrap','on');
 g=uigridlayout(codec,[5 2]); g.RowHeight={38,38,'1x',52,60};
 bar=uigridlayout(g,[1 5]); bar.Layout.Column=[1 2]; bar.ColumnWidth={110,145,95,'1x','1x'}; bar.Padding=0;
 uibutton(bar,'Text','Upload image','ButtonPushedFcn',@upload);
 method=uidropdown(bar,'Items',{'Selective SVM','SVM','Fixed','Rules','Exhaustive'});
-uilabel(bar,'Text','Level  /  scale'); level=uispinner(bar,'Limits',[.1 8],'Value',1,'Step',.1);
-scale=uispinner(bar,'Limits',[.25 4],'Value',1,'Step',.25);
+uilabel(bar,'Text','Level  /  scale'); level=uispinner(bar,'Limits',[.1 8],'Value',1,'Step',.1,'ValueChangedFcn',@settingsChanged);
+scale=uispinner(bar,'Limits',[.25 4],'Value',1,'Step',.25,'ValueChangedFcn',@settingsChanged);
 bar2=uigridlayout(g,[1 4]); bar2.Layout.Column=[1 2]; bar2.Padding=0;
 uibutton(bar2,'Text','Compress','ButtonPushedFcn',@encode);
 uibutton(bar2,'Text','Save compressed file','ButtonPushedFcn',@saveStream);
@@ -58,12 +58,13 @@ pg=uigridlayout(perf,[3 2]); pg.RowHeight={36,'1x','1x'};
 uibutton(pg,'Text','Compare current image at nine levels','ButtonPushedFcn',@compare);
 ptext=uilabel(pg,'Text',''); axs=gobjects(1,4); for k=1:4, axs(k)=uiaxes(pg); end
 tmp=[tempname '.soc']; fig.CloseRequestFcn=@finish; stream=''; paired=false; enc=NaN; model=[]; original=[];
-if isfile(fullfile(root,'models','compression_svm.mat')), model=get_model(root); end
-refreshModel(); sample=dir(fullfile(root,'datasets','sample_images','*.png'));
-loadSource(fullfile(sample(1).folder,sample(1).name));
+refreshModel();
+info.Text='Upload a photo to analyze, cluster, compare and save all results for that image.';
+status.Text='Waiting for an uploaded image';
     function loadSource(path)
         currentSourcePath=char(path);
         img=read_image(path); original=img; preview(orig,original,'Original');
+        themeAReset();
         blockRow.Value=1; blockCol.Value=1;
         blockRow.Limits=[1 max(2,ceil(size(img,1)/8))];
         blockCol.Limits=[1 max(2,ceil(size(img,2)/8))];
@@ -77,22 +78,32 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
         f=dir(path); info.Text=sprintf('%s   |   %d × %d   |   %d channel(s)   |   source file %d bytes', ...
             f.name,size(img,2),size(img,1),size(img,3),f.bytes);
         paired=false; stream=''; cla(recon); cla(mapAx); counts.Text='Compress to view block classes.'; status.Text='Ready';
-        ensureModel();
+        model=train_svm_model(original,penalty.Value,level.Value,scale.Value); refreshModel();
         delete(findall(galleryLayout,'Type','axes'));
         draw_six_images(galleryLayout,original,model,level.Value,scale.Value);
         title(galleryLayout,sprintf('Compression comparison   |   Level %g   |   Scale %g',level.Value,scale.Value));
         tabs.SelectedTab=gallery;
     end
-    function path=currentSource()
-        path=currentSourcePath;
+    function settings=currentSettings()
+        settings=[];
+        if ~isempty(currentSourcePath)
+            settings=struct('Path',currentSourcePath,'Level',level.Value,'Scale',scale.Value, ...
+                'Clusters',str2double(kInput.Value),'Lambda',penalty.Value);
+        end
     end
     function refreshModel()
         if isempty(model), modelText.Text='Model awaiting training'; return; end
-        modelText.Text=sprintf('Model loaded  |  held-out accuracy %.1f%%',100*model.accuracy);
+        if isnan(model.accuracy)
+            modelText.Text=sprintf('Image-specific SVM | %d training blocks | no held-out blocks',numel(model.labels));
+        else
+            modelText.Text=sprintf('Image-specific SVM | held-out accuracy %.1f%% | %d training blocks', ...
+                100*model.accuracy,numel(model.labels));
+        end
         tableUI.Data=model.confusion;
     end
     function ensureModel()
-        if isempty(model), model=get_model(root); refreshModel(); end
+        assert(~isempty(original),'Upload a photo first.');
+        if isempty(model), model=train_svm_model(original,penalty.Value,level.Value,scale.Value); refreshModel(); end
     end
     function upload(~,~)
         [f,d]=uigetfile({'*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff','Images'});
@@ -100,7 +111,7 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
         try, loadSource(fullfile(d,f)); catch e, alert(e); end
     end
     function train(~,~)
-        try, model=train_svm_model(); refreshModel(); catch e, alert(e); end
+        try, assert(~isempty(original),'Upload a photo first.'); model=train_svm_model(original,penalty.Value,level.Value,scale.Value); refreshModel(); catch e, alert(e); end
     end
     function encode(~,~)
         try
@@ -146,9 +157,15 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
     function qp(~,~)
         try
             ensureModel(); r=svm_qp_demo(model,qa);
-            qt.Value={sprintf('0.5 ||w||² + C Σξ = %.4f   |   support vectors %d',r.objective,r.supportCount), ...
-                sprintf('Training accuracy %.1f%%   |   margin width %.3f   |   min signed margin %.3f',100*r.accuracy,r.width,r.minFunctionalMargin), ...
-                sprintf('KKT: primal %.2g, dual %.2g, stationarity %.2g, complementarity %.2g',r.primal,r.dual,r.stationarity,r.complementarity)};
+            if isfield(r,'isImageRun') && r.isImageRun
+            qt.Value={sprintf('Image-derived QP status: %s',char(r.status)), ...
+                    sprintf('Primal objective: %.6g | held-out image-block accuracy: %.3f',r.objective,r.accuracy), ...
+                    sprintf('Maximum feasibility violation: %.3g | margin width: %.3g',r.primal,r.width)};
+            else
+                qt.Value={sprintf('0.5 ||w||² + C Σξ = %.4f   |   support vectors %d',r.objective,r.supportCount), ...
+                    sprintf('Training accuracy %.1f%%   |   margin width %.3f   |   min signed margin %.3f',100*r.accuracy,r.width,r.minFunctionalMargin), ...
+                    sprintf('KKT: primal %.2g, dual %.2g, stationarity %.2g, complementarity %.2g',r.primal,r.dual,r.stationarity,r.complementarity)};
+            end
         catch e, alert(e); end
     end
     function pcaView(~,~)
@@ -157,7 +174,7 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
     function compare(~,~)
         try
             ptext.Text='Running comparisons…'; drawnow; ensureModel();
-            [~,pairs]=compare_methods(original,model,axs);
+            [~,pairs]=compare_methods(original,model,axs,[],scale.Value);
             ptext.Text=sprintf('%d/%d pairs within 10%% bitrate',nnz(pairs.Within10Pct),height(pairs));
         catch e, ptext.Text='Comparison interrupted'; alert(e); end
     end
@@ -191,7 +208,17 @@ loadSource(fullfile(sample(1).folder,sample(1).name));
         candidateTable.Data=table(names,d.mse',d.bytes',d.bytes'/8,d.cost', ...
             'VariableNames',{'Setting','MSE','Bytes','BitsPerPixel','Cost'});
         preview(blockAx,patch,sprintf('Original block at row %d, column %d',blockRow.Value,blockCol.Value));
-        costText.Text=sprintf('Lowest cost: %s (%.2f). Cost = MSE + lambda × bits per pixel. SVM training uses lambda = 32.',names(id),d.cost(id));
+        costText.Text=sprintf('Lowest cost: %s (%.2f). Cost = MSE + lambda × bits per pixel. Current-image SVM uses lambda = %g.',names(id),d.cost(id),penalty.Value);
+    end
+    function settingsChanged(~,~)
+        if isempty(original), return; end
+        try
+            model=train_svm_model(original,penalty.Value,level.Value,scale.Value); refreshModel();
+            themeAReset(); blockCost([],[]);
+            delete(findall(galleryLayout,'Type','axes'));
+            draw_six_images(galleryLayout,original,model,level.Value,scale.Value);
+            title(galleryLayout,sprintf('Uploaded image | Level %g | Scale %g',level.Value,scale.Value));
+        catch e, alert(e); end
     end
     function finish(~,~)
         if isfile(tmp), delete(tmp); end

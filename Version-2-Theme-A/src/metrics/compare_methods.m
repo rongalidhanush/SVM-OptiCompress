@@ -1,10 +1,12 @@
-function [rates,matched]=compare_methods(img,model,axesList)
+function [rates,matched]=compare_methods(img,model,axesList,levels,scale)
 % Compare actual encoded files for the same source, including side information.
+if nargin<4 || isempty(levels), levels=[.35 .55 .8 1 1.4 2 3 4.5 7]; end
+if nargin<5 || isempty(scale), scale=1; end
 tmp=[tempname '.soc']; tidy=onCleanup(@() remove_file(tmp)); rates=table();
 methods=["Fixed","Rules","SVM","Selective SVM","Exhaustive"];
 for method=methods
-    for level=[.35 .55 .8 1 1.4 2 3 4.5 7]
-        [~,enc]=compress_image(img,tmp,method,level,1,model);
+    for level=levels
+        [~,enc]=compress_image(img,tmp,method,level,scale,model);
         [out,~,dec]=decompress_image(tmp);
         row=image_metrics(img,out,tmp,enc,dec); row.Method=method; row.Level=level;
         rates=[rates;row]; %#ok<AGROW>
@@ -21,7 +23,7 @@ for i=1:height(base)
         row.Within10Pct=gap<=.10; matched=[matched;row]; %#ok<AGROW>
     end
 end
-if nargin<3, return; end
+if nargin<3 || isempty(axesList), return; end
 fields=["PSNR","SSIM","Ratio","Encode_s"]; units=["PSNR (dB)","SSIM","Raw / encoded bytes","Encoding time (s)"];
 for k=1:4
     ax=axesList(k); cla(ax); hold(ax,'on');

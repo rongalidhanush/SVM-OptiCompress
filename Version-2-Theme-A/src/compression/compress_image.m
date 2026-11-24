@@ -11,7 +11,7 @@ switch string(method)
         classes(X(:,2)<12)=1; classes(X(:,4)>.26)=3;
     case "SVM"
         assert(~isempty(model),'Train or load the SVM first.');
-        classes=predict(model.classifier,block_features(b));
+        classes=predict_block_model(model,block_features(b));
     case "Selective SVM"
         assert(~isempty(model),'Train or load the SVM first.');
         [classes,indices,review.changed]=selective_quantizers(b,model,.25,level,scale);

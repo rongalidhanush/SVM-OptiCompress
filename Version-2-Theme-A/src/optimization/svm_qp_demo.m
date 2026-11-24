@@ -1,4 +1,30 @@
 function r=svm_qp_demo(model,ax)
+if isfield(model,'sourceKind') && strcmp(model.sourceKind,'uploaded-image')
+    data=struct('Features',model.allFeatures,'Labels',model.allLabels, ...
+        'TrainMask',model.trainMask,'TestMask',model.testMask);
+    binary=image_binary_split(data); q=solve_image_qp(binary);
+    r=struct('objective',q.Objective,'accuracy',q.HeldOutAccuracy, ...
+        'supportCount',NaN,'width',NaN,'minFunctionalMargin',NaN, ...
+        'primal',q.MaxViolation,'dual',NaN,'stationarity',NaN, ...
+        'complementarity',NaN,'status',q.Status,'reason',q.Reason, ...
+        'isImageRun',true,'margins',[]);
+    if binary.Available && isfield(q,'Weights') && ~isempty(q.Weights)
+        r.margins=binary.TestY.*(binary.TestX*q.Weights+q.Bias);
+        if ~isempty(r.margins), r.minFunctionalMargin=min(r.margins); end
+        r.width=2/norm(q.Weights);
+    end
+    if nargin>1 && ~isempty(ax)
+        cla(ax);
+        if binary.Available && ~isempty(r.margins)
+            stem(ax,1:numel(r.margins),r.margins,'filled'); yline(ax,1,'k--');
+            xlabel(ax,'Held-out block'); ylabel(ax,'Signed functional margin');
+            title(ax,'Uploaded-image QP margins'); grid(ax,'on');
+        else
+            text(ax,.05,.5,char(q.Reason),'Units','normalized','Interpreter','none'); axis(ax,'off');
+        end
+    end
+    return
+end
 % Use two named features and bounded, evenly spaced samples per class.
 ids=[]; y=[];
 for k=[1 3]

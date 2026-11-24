@@ -1,5 +1,18 @@
-function model=train_svm_model()
+function model=train_svm_model(inputImage,lambda,level,scale)
 root=setup();
+if nargin>0 && ~isempty(inputImage)
+    if nargin<2, lambda=32; end
+    if nargin<3, level=1; end
+    if nargin<4, scale=1; end
+    model=train_image_model(inputImage,lambda,level,scale);
+    if isnan(model.accuracy)
+        fprintf('Image-specific SVM trained on %d blocks; no held-out blocks were available.\n',numel(model.labels));
+    else
+        fprintf('Image-specific SVM held-out block accuracy %.1f%%.\n',100*model.accuracy);
+    end
+    disp(model.confusion)
+    return
+end
 [X,y,trainNames]=dataset('training',root);
 [V,t,testNames]=dataset('testing',root);
 assert(all(ismember(1:3,unique(y))),'Training set must contain all three rate-distortion classes.');
