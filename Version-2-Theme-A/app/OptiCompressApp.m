@@ -174,9 +174,12 @@ status.Text='Waiting for an uploaded image';
     function compare(~,~)
         try
             ptext.Text='Running comparisons…'; drawnow; ensureModel();
-            [~,pairs]=compare_methods(original,model,axs,[],scale.Value);
+            [~,pairs]=compare_methods(original,model,axs,[],scale.Value,@compareProgress);
             ptext.Text=sprintf('%d/%d pairs within 10%% bitrate',nnz(pairs.Within10Pct),height(pairs));
         catch e, ptext.Text='Comparison interrupted'; alert(e); end
+    end
+    function compareProgress(done,total,compareMethod,compareLevel)
+        ptext.Text=sprintf('Rate comparison %d/%d | %s | level %g',done,total,char(compareMethod),compareLevel);
     end
     function clusterView(~,~)
         try

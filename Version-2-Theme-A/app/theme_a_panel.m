@@ -4,12 +4,12 @@ folder='';
 names={'PCA and held-out variance','SVM training/convergence','Primal QP', ...
     'Conjugate gradient','Six-image compression','Rate-distortion', ...
     'Clustering','Spatial transitions','Block costs and map','Every block feature'};
-g=uigridlayout(tab,[5 2]); g.RowHeight={38,42,44,'1x','1x'};
+g=uigridlayout(tab,[3 2]); g.RowHeight={38,58,'1x'}; g.ColumnWidth={'1x','1.6x'};
 pick=uidropdown(g,'Items',names,'ValueChangedFcn',@refresh);
 runButton=uibutton(g,'Text','Analyze current uploaded image','ButtonPushedFcn',@analyze);
-status=uilabel(g,'Text','Upload a photo, then analyze it here.'); status.Layout.Column=[1 2];
-tbl=uitable(g); tbl.Layout.Column=[1 2];
-ax=uiaxes(g); ax.Layout.Column=[1 2];
+status=uilabel(g,'Text','Upload a photo, then analyze it here.','WordWrap','on'); status.Layout.Row=2; status.Layout.Column=[1 2];
+tbl=uitable(g); tbl.Layout.Row=3; tbl.Layout.Column=1;
+ax=uiaxes(g); ax.Layout.Row=3; ax.Layout.Column=2;
 pick.Enable='off';
 resetHandle=@resetForNewImage;
     function resetForNewImage()
@@ -28,6 +28,7 @@ resetHandle=@resetForNewImage;
             end
         catch err
             status.Text=['Analysis failed: ' err.message];
+            try, uialert(ancestor(tab,'figure'),err.message,'Theme A analysis failed'); catch, end
         end
         runButton.Enable='on';
     end
@@ -65,6 +66,7 @@ resetHandle=@resetForNewImage;
             end
         catch err
             tbl.Data=[]; status.Text=['Could not load result: ' err.message];
+            try, uialert(ancestor(tab,'figure'),err.message,'Could not display Theme A result'); catch, end
         end
     end
     function showSavedImage(file)

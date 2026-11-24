@@ -14,10 +14,12 @@ if isfield(model,'sourceKind') && strcmp(model.sourceKind,'uploaded-image')
         r.width=2/norm(q.Weights);
     end
     if nargin>1 && ~isempty(ax)
-        cla(ax);
+        cla(ax,'reset');
         if binary.Available && ~isempty(r.margins)
-            stem(ax,1:numel(r.margins),r.margins,'filled'); yline(ax,1,'k--');
-            xlabel(ax,'Held-out block'); ylabel(ax,'Signed functional margin');
+            ordered=sort(r.margins);
+            plot(ax,1:numel(ordered),ordered,'.','MarkerSize',9); hold(ax,'on');
+            yline(ax,1,'k--','Target margin'); yline(ax,0,'k:'); hold(ax,'off'); grid(ax,'on');
+            xlabel(ax,'Held-out blocks (sorted by margin)'); ylabel(ax,'Signed functional margin');
             title(ax,'Uploaded-image QP margins'); grid(ax,'on');
         else
             text(ax,.05,.5,char(q.Reason),'Units','normalized','Interpreter','none'); axis(ax,'off');

@@ -154,8 +154,10 @@ exportgraphics(fig,fullfile(out,'svm_convergence.png')); clear guard;
 fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
 if binary.Available && isfield(qp,'Weights') && ~isempty(binary.TestY)
     margins=binary.TestY.*(binary.TestX*qp.Weights+qp.Bias);
-    stem(1:numel(margins),margins,'filled'); yline(1,'k--'); grid on;
-    xlabel('Held-out block'); ylabel('Signed functional margin');
+    margins=sort(margins);
+    plot(1:numel(margins),margins,'.','MarkerSize',9); hold on;
+    yline(1,'k--','Target margin'); yline(0,'k:'); hold off; grid on;
+    xlabel('Held-out blocks (sorted by margin)'); ylabel('Signed functional margin');
     title(sprintf('Image-derived QP margins: %s',name),'Interpreter','none');
 else
     axis off; text(.05,.5,'QP margins unavailable because the image split lacks two classes.','Units','normalized');
