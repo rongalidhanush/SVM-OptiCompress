@@ -1,4 +1,4 @@
-# SVM-OptiCompress
+# Version 1 · SVM-OptiCompress
 
 **Project author: Dhanush Naidu**
 
@@ -7,6 +7,8 @@ Amrita Vishwa Vidyapeetham · Mathematics for Computing 3 · End-semester projec
 SVM-OptiCompress is an offline MATLAB application for exploring how image quality changes as a file gets smaller. It divides a grayscale or RGB image into 8 × 8 blocks and chooses strong, moderate, or light compression for each block. Its **Selective SVM** encoder asks a second question: if the encoder can double-check only a quarter of its predictions, which decisions are worth revisiting?
 
 ![Original sample and five decoded images with file sizes, PSNR and SSIM](results/graphs/six_image_comparison.png)
+
+This folder preserves the original codec implementation and benchmark. Start here to trace a block from prediction to a saved file. For the four additional course experiments, use [Version 2](../Version-2-Theme-A/README.md). [Back to the repository overview](../README.md).
 
 ## Run the project
 
@@ -18,7 +20,7 @@ SVM-OptiCompress is an offline MATLAB application for exploring how image qualit
    git clone https://github.com/rongalidhanush/SVM-OptiCompress.git
    ```
 
-2. Open MATLAB and set **Current Folder** to the extracted or cloned folder containing `run_project.m` and `setup.m`.
+2. Open MATLAB and select **Version-1-Original** inside the extracted repository as Current Folder. This folder contains the original launcher and setup script.
 3. Enter this in the MATLAB Command Window:
 
    ```matlab

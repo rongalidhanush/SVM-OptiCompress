@@ -1,22 +1,34 @@
 # SVM-OptiCompress
 
-**Dhanush Naidu · Amrita Vishwa Vidyapeetham**  
-Mathematics for Computing 3 · 22MAT220
+**Dhanush Naidu · Amrita Vishwa Vidyapeetham**
 
-| Version | Project |
+22MAT220 · Mathematics for Computing III · End-semester group project
+
+How should an image encoder spend a limited budget for checking its decisions? This MATLAB project predicts a compression setting for each 8 × 8 block, then tries all three settings on the quarter of blocks where the SVM scores are closest. Each encoder produces a binary file that can be decoded independently.
+
+**For the current coursework submission, open [Version 2 — Theme A](Version-2-Theme-A/README.md).** Both folders are self-contained.
+
+| Version | What to explore |
 |---|---|
-| [Version 1 — Original](Version-1-Original/) | Original MATLAB compression app with five encoders, selective SVM review, six-image gallery and benchmark results. |
-| [Version 2 — Theme A](Version-2-Theme-A/) | Current coursework version. Includes the compression app plus real-image PCA, a from-scratch SVM and library comparison, a CVXOPT quadratic program and sparse Conjugate Gradient experiments. |
+| [Version 1 — Original](Version-1-Original/README.md) | Five image encoders, a six-image comparison, the selective-review experiment and a standalone decoder. |
+| [Version 2 — Theme A](Version-2-Theme-A/README.md) | The original app plus real-image PCA, a custom SVM compared with MATLAB, a CVXOPT quadratic program and a large sparse Conjugate Gradient experiment. |
 
-## Run the current version
+## Run the demonstration
 
-Open MATLAB in the repository root and run:
+Download and extract the repository, or clone it with Git. Open MATLAB in the repository root and run:
 
 ```matlab
 cd('Version-2-Theme-A')
 run_project
 ```
 
-Use **Six-image comparison** for the codec demo and **Theme A experiments** for the four course methods. To reproduce the optimization results from source, see the [Theme A setup and experiment guide](Version-2-Theme-A/documentation/theme_a.md).
+The app opens on **Six-image comparison**. Choose **Image codec → Compress** to see how many predictions were reviewed and changed. Open **Theme A experiments** to inspect the solver results and convergence plots. The saved CVXOPT results are available in the app without launching Python.
 
-To run the original version, start MATLAB in the repository root, open the Version-1-Original folder and run the same launcher.
+Tested with MATLAB R2026a on Windows, Statistics and Machine Learning Toolbox, and Optimization Toolbox. The version guides give the full setup and reproduction commands.
+
+## Results at a glance
+
+- **Compression:** On the gallery sample, selective review reduced the file from 29,767 to 27,685 bytes relative to ordinary SVM, while PSNR fell from 26.53 to 26.11 dB. Across three synthetic test scenes, selective review had lower block cost than equal-budget random review. [Pilot measurements](Version-1-Original/results/metrics/selective_pilot.csv)
+- **Optimization:** The custom SVM, MATLAB fit and CVXOPT solution reached primal objectives near 66.94 on the same training problem. Custom CG and MATLAB pcg both reached the specified tolerance in 72 iterations on a system with 196,608 unknowns. [Theme A measurements](Version-2-Theme-A/results/theme_a/)
+
+![Original image and five decoded outputs with size and quality measurements](Version-2-Theme-A/results/graphs/six_image_comparison.png)
