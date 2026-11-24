@@ -20,7 +20,7 @@ This folder preserves the original codec implementation and benchmark. Start her
    git clone https://github.com/rongalidhanush/SVM-OptiCompress.git
    ```
 
-2. Open MATLAB and select **Version-1-Original** inside the extracted repository as Current Folder. This folder contains the original launcher and setup script.
+2. Open MATLAB and select **Version-1** inside the extracted repository as Current Folder. This folder contains the original launcher and setup script.
 3. Enter this in the MATLAB Command Window:
 
    ```matlab

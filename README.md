@@ -10,7 +10,7 @@ How should an image encoder spend a limited budget for checking its decisions? T
 
 | Version | What to explore |
 |---|---|
-| [Version 1 — Original](Version-1-Original/README.md) | Five image encoders, a six-image comparison, the selective-review experiment and a standalone decoder. |
+| [Version 1](Version-1/README.md) | Five image encoders, a six-image comparison, the selective-review experiment and a standalone decoder. |
 | [Version 2 — Theme A](Version-2-Theme-A/README.md) | The original app plus real-image PCA, a custom SVM compared with MATLAB, a CVXOPT quadratic program and a large sparse Conjugate Gradient experiment. |
 
 ## Run the demonstration
@@ -28,7 +28,7 @@ Tested with MATLAB R2026a on Windows, Statistics and Machine Learning Toolbox, a
 
 ## Results at a glance
 
-- **Compression:** On the gallery sample, selective review reduced the file from 29,767 to 27,685 bytes relative to ordinary SVM, while PSNR fell from 26.53 to 26.11 dB. Across three synthetic test scenes, selective review had lower block cost than equal-budget random review. [Pilot measurements](Version-1-Original/results/metrics/selective_pilot.csv)
+- **Compression:** On the gallery sample, selective review reduced the file from 29,767 to 27,685 bytes relative to ordinary SVM, while PSNR fell from 26.53 to 26.11 dB. Across three synthetic test scenes, selective review had lower block cost than equal-budget random review. [Pilot measurements](Version-1/results/metrics/selective_pilot.csv)
 - **Optimization:** The custom SVM, MATLAB fit and CVXOPT solution reached primal objectives near 66.94 on the same training problem. Custom CG and MATLAB pcg both reached the specified tolerance in 72 iterations on a system with 196,608 unknowns. [Theme A measurements](Version-2-Theme-A/results/theme_a/)
 
 ![Original image and five decoded outputs with size and quality measurements](Version-2-Theme-A/results/graphs/six_image_comparison.png)
