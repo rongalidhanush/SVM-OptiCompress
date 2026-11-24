@@ -3,7 +3,8 @@ function resetHandle=theme_a_panel(tab,root,currentImageProvider)
 folder='';
 names={'PCA and held-out variance','SVM training/convergence','Primal QP', ...
     'Conjugate gradient','Six-image compression','Rate-distortion', ...
-    'Clustering','Spatial transitions','Block costs and map','Every block feature'};
+    'Clustering','Spatial transitions','Block costs and map','Every block feature', ...
+    'Raw covariance matrix','Feature correlation matrix','PCA covariance matrix'};
 g=uigridlayout(tab,[3 2]); g.RowHeight={38,58,'1x'}; g.ColumnWidth={'1x','1.6x'};
 pick=uidropdown(g,'Items',names,'ValueChangedFcn',@refresh);
 runButton=uibutton(g,'Text','Analyze current uploaded image','ButtonPushedFcn',@analyze);
@@ -58,11 +59,17 @@ resetHandle=@resetForNewImage;
                     showSavedImage('spatial_transitions.png');
                 case 9
                     tbl.Data=readtable(fullfile(folder,'block_costs.csv')); showSavedImage('block_cost_map.png');
-                otherwise
+                case 10
                     tbl.Data=readtable(fullfile(folder,'block_features.csv'));
                     tbl.Data=tbl.Data(1:min(height(tbl.Data),5000),:);
                     imagesc(ax,readmatrix(fullfile(folder,'cluster_map.csv'))); axis(ax,'image'); colorbar(ax);
                     title(ax,'Current-image block labels and split');
+                case 11
+                    tbl.Data=readtable(fullfile(folder,'feature_covariance.csv')); showSavedImage('feature_covariance.png');
+                case 12
+                    tbl.Data=readtable(fullfile(folder,'feature_correlation.csv')); showSavedImage('feature_correlation.png');
+                case 13
+                    tbl.Data=readtable(fullfile(folder,'pca_covariance.csv')); showSavedImage('pca_covariance.png');
             end
         catch err
             tbl.Data=[]; status.Text=['Could not load result: ' err.message];

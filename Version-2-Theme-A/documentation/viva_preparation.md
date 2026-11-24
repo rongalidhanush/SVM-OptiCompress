@@ -35,3 +35,7 @@ For a repeatable live example, use the bundled scene_12.png and leave the block 
 **How would you establish generalization?** Train and test on larger independent image collections, keep scene variants in one split and report per-class and per-image results. The supplied data illustrate the workflow.
 
 **What does PCA explain?** It shows directions of greatest variation in standardized block features. The eigenvalues measure variance captured by each component.
+
+**What do the covariance and correlation heatmaps show?** Each cell compares one block feature with another. Covariance retains the features' original units, so its diagonal contains feature variances and its color scale may be dominated by large-scale features. Correlation normalizes pairwise covariance to values from -1 to 1, so its strength and direction are easier to compare across features. PCA eigendecomposes the covariance of standardized training features; this matrix is approximately the training-feature correlation matrix. A constant feature has undefined correlation and is marked NA.
+
+**What data are in each matrix?** They are calculated from training blocks of the currently uploaded image. The matching CSV and heatmap are saved in that image's timestamped Theme A run folder.

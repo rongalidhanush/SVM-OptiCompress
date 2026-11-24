@@ -18,6 +18,8 @@ The input is converted to 8-bit grayscale/RGB and padded into 8 × 8 blocks. Sev
 
 PCA standardization and covariance are fitted on the training blocks, and the held-out feature rows are reconstructed with the first k principal components. The codec SVM learns the image's quantization labels from its training blocks. The binary scratch-SVM and QP comparison uses the highest class present as the positive class and the remaining classes as negative. It is marked not applicable if the photo does not contain both classes in the training split. CVXOPT is optional; MATLAB `quadprog` runs in the main analysis.
 
+The run also exports a raw feature covariance matrix, a Pearson correlation matrix, and the covariance matrix of the standardized training features used by PCA. Their heatmaps use the same seven feature names on both axes. Covariance values retain the original feature units and can have very different scales; correlation values are normalized to [-1, 1]. A constant feature has undefined correlation and is displayed as `NA` in the heatmap.
+
 The CG demonstration constructs the sparse system
 
 \[
@@ -33,6 +35,9 @@ from the uploaded photo's red (or grayscale) channel. If the image exceeds 800 p
 | `input_image.*`, `run_metadata.csv` | Input copy, dimensions, source path and settings. |
 | `block_features.csv`, `class_distribution.csv` | Seven features, quantization label, block coordinates, split, and per-class counts for every image block. |
 | `pca.csv`, `pca_results.png` | Image-specific training variance and held-out feature reconstruction error. |
+| `feature_covariance.csv`, `feature_covariance.png` | Raw covariance between the seven training-block features. |
+| `feature_correlation.csv`, `feature_correlation.png` | Pearson correlations between training-block features, on the [-1, 1] scale. |
+| `pca_covariance.csv`, `pca_covariance.png` | Covariance of standardized training features; this is the matrix used for PCA. |
 | `svm.csv`, `svm_train.csv`, `svm_test.csv`, `svm_convergence.png` | Scratch SVM and `fitcsvm` results, binary data when available, and KKT history. |
 | `quadprog.csv`, `svm_qp_margins.png` | Image-specific primal QP status, objective, feasibility, test accuracy, and margin plot. |
 | `cg.csv`, `cg_residual.csv`, `cg_convergence.png`, `cg_smoothed_channel.png` | Sparse system size, iterations, residual history and smoothing result. |

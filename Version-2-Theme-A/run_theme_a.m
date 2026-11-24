@@ -53,7 +53,9 @@ writetable(featureTable,fullfile(out,'block_features.csv'));
 X=data.Features; train=data.TrainMask; test=data.TestMask;
 mu=mean(X(train,:),1); sd=std(X(train,:),0,1); sd(sd==0)=1;
 Z=(X-mu)./sd; Ztrain=Z(train,:); Ztest=Z(test,:);
-[V,eigenvalues]=eig(cov(Ztrain),'vector'); [eigenvalues,order]=sort(max(0,eigenvalues),'descend'); V=V(:,order);
+pcaCovariance=cov(Ztrain);
+[V,eigenvalues]=eig(pcaCovariance,'vector'); [eigenvalues,order]=sort(max(0,eigenvalues),'descend'); V=V(:,order);
+save_feature_matrices(X(train,:),Ztrain,featureNames,out);
 pcaError=zeros(7,1);
 for n=1:7
     projected=Ztest*V(:,1:n)*V(:,1:n)';
@@ -163,6 +165,69 @@ else
     axis off; text(.05,.5,'QP margins unavailable because the image split lacks two classes.','Units','normalized');
 end
 exportgraphics(fig,fullfile(out,'svm_qp_margins.png')); clear guard;
+end
+
+function save_feature_matrices(Xtrain,Ztrain,names,out)
+% Export raw feature covariance, feature correlation, and the standardized
+% covariance matrix used by the PCA eigendecomposition.
+rawCovariance=cov(Xtrain);
+correlation=corr(Xtrain);
+pcaCovariance=cov(Ztrain);
+writetable(matrix_table(rawCovariance,names),fullfile(out,'feature_covariance.csv'));
+writetable(matrix_table(correlation,names),fullfile(out,'feature_correlation.csv'));
+writetable(matrix_table(pcaCovariance,names),fullfile(out,'pca_covariance.csv'));
+write_matrix_heatmap(rawCovariance,names,fullfile(out,'feature_covariance.png'), ...
+    'Raw feature covariance (training blocks)','covariance');
+write_matrix_heatmap(correlation,names,fullfile(out,'feature_correlation.png'), ...
+    'Feature correlation (training blocks)','correlation');
+write_matrix_heatmap(pcaCovariance,names,fullfile(out,'pca_covariance.png'), ...
+    'Standardized covariance used by PCA','correlation');
+end
+
+function T=matrix_table(M,names)
+T=array2table(M,'VariableNames',names);
+T=addvars(T,string(names(:)),'Before',1,'NewVariableNames','Feature');
+end
+
+function write_matrix_heatmap(M,names,path,plotTitle,kind)
+fig=figure('Visible','off','Color','w'); guard=onCleanup(@() close(fig));
+ax=axes(fig); ax.Color='w'; ax.XColor=[.12 .12 .12]; ax.YColor=[.12 .12 .12];
+ax.FontSize=9; ax.LineWidth=.8; ax.TickLabelInterpreter='none';
+ax.XAxis.Color=[.12 .12 .12]; ax.YAxis.Color=[.12 .12 .12];
+h=imagesc(ax,M); set(h,'AlphaData',~isnan(M)); axis(ax,'image'); cb=colorbar(ax);
+cb.Color=[.12 .12 .12];
+n=numel(names); ax.XTick=1:n; ax.XTickLabel=names; ax.YTick=1:n; ax.YTickLabel=names;
+xtickangle(ax,45); xlabel(ax,'Feature'); ylabel(ax,'Feature'); title(ax,plotTitle,'Interpreter','none');
+ax.XLabel.Color=[.12 .12 .12]; ax.YLabel.Color=[.12 .12 .12]; ax.Title.Color=[.08 .08 .08];
+colormap(ax,blue_white_red(128));
+if strcmp(kind,'correlation')
+    clim(ax,[-1 1]); fmt='%.2f'; valueScale=1; cb.Label.String='Correlation coefficient';
+else
+    bound=max(abs(M),[],'all'); if isempty(bound)||bound==0, bound=1; end
+    clim(ax,[-bound bound]); fmt='%.1e'; valueScale=bound; cb.Label.String='Covariance';
+end
+hold(ax,'on');
+for r=1:n
+    for c=1:n
+        if isfinite(M(r,c))
+            if abs(M(r,c))/valueScale>.48, txtColor='w'; else, txtColor='k'; end
+            text(ax,c,r,sprintf(fmt,M(r,c)),'HorizontalAlignment','center', ...
+                'VerticalAlignment','middle','FontSize',7,'Color',txtColor);
+        else
+            text(ax,c,r,'NA','HorizontalAlignment','center','VerticalAlignment','middle', ...
+                'FontSize',7,'Color',[.25 .25 .25]);
+        end
+    end
+end
+hold(ax,'off');
+exportgraphics(fig,path,'Resolution',160); clear guard;
+end
+
+function cmap=blue_white_red(n)
+half=ceil(n/2); t=linspace(0,1,half)';
+blue=[.16 .34 .72]; white=[1 1 1]; red=[.76 .18 .22];
+left=blue+(white-blue).*t; right=white+(red-white).*linspace(0,1,n-half)';
+cmap=[left;right];
 end
 
 function save_block_cost_outputs(data,out,lambda,level,scale)
