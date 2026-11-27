@@ -1,34 +1,52 @@
 # SVM-OptiCompress
 
-**Dhanush Naidu · Amrita Vishwa Vidyapeetham**
+**Dhanush Naidu · Keerthan Reddy · Amrita Vishwa Vidyapeetham**  
+22MAT220 · Mathematics for Computing III · End-semester project
 
-22MAT220 · Mathematics for Computing III · End-semester group project
+SVM-OptiCompress is a MATLAB image-compression laboratory. It divides an image into 8 × 8 blocks, extracts local statistics, predicts a quantization class with a selective SVM, encodes the result as a SOC1 stream, and reconstructs the image. The final version also provides image-specific Theme A experiments and a simulated quantum-edge analysis.
 
-How should an image encoder spend a limited budget for checking its decisions? This MATLAB project predicts a compression setting for each 8 × 8 block, then tries all three settings on the quarter of blocks where the SVM scores are closest. Each encoder produces a binary file that can be decoded independently.
+## Repository versions
 
-**For the current coursework submission, open [Version 2 — Theme A](Version-2-Theme-A/README.md).** Both folders are self-contained.
-
-| Version | What to explore |
+| Folder | Purpose |
 |---|---|
-| [Version 1](Version-1/README.md) | Five image encoders, a six-image comparison, the selective-review experiment and a standalone decoder. |
-| [Version 2 — Theme A](Version-2-Theme-A/README.md) | The original app plus real-image PCA, a custom SVM compared with MATLAB, a CVXOPT quadratic program and a large sparse Conjugate Gradient experiment. |
+| [Version 1](Version-1/README.md) | Original compression baseline, five codec methods, six-image comparison and standalone SOC decoder. |
+| [Version 2 · Final](Version-2-Final/README.md) | Final uploaded-image workflow with SVM/QP, conjugate gradient, clustering, spatial transitions, covariance/correlation analysis, simulated quantum edges, photo restoration and level range 0.1–150. |
 
-## Run the demonstration
+The Version 1 folder is preserved as the historical baseline. Version 2 · Final is the submission version.
 
-Download and extract the repository, or clone it with Git. Open MATLAB in the repository root and run:
+## Run Version 2 · Final
+
+1. Clone or download this repository and extract it to a writable folder.
+2. Open MATLAB R2026a and set the Current Folder to `Version-2-Final`.
+3. Run:
 
 ```matlab
-cd('Version-2-Theme-A')
 run_project
 ```
 
-The app opens on **Six-image comparison**. Choose **Image codec → Compress** to see how many predictions were reviewed and changed. Open **Theme A experiments** to inspect the solver results and convergence plots. The saved CVXOPT results are available in the app without launching Python.
+Upload a photo in **Image codec**, choose a codec and compression level, then click **Compress**. The app displays the input and reconstruction. Save the SOC1 file, reopen it with **Open compressed file**, and click **Decompress** to decode it.
 
-Tested with MATLAB R2026a on Windows, Statistics and Machine Learning Toolbox, and Optimization Toolbox. The version guides give the full setup and reproduction commands.
+Open **Theme A experiments** and choose **Analyze current uploaded image**. All measurements and figures are generated from the uploaded photo and saved under `results/theme_a/user_runs/<timestamp>_<image-name>/`.
 
-## Results at a glance
+## Final-version features
 
-- **Compression:** On the gallery sample, selective review reduced the file from 29,767 to 27,685 bytes relative to ordinary SVM, while PSNR fell from 26.53 to 26.11 dB. Across three synthetic test scenes, selective review had lower block cost than equal-budget random review. [Pilot measurements](Version-1/results/metrics/selective_pilot.csv)
-- **Optimization:** The custom SVM, MATLAB fit and CVXOPT solution reached primal objectives near 66.94 on the same training problem. Custom CG and MATLAB pcg both reached the specified tolerance in 72 iterations on a system with 196,608 unknowns. [Theme A measurements](Version-2-Theme-A/results/theme_a/)
+- Selective SVM review of the most ambiguous block decisions.
+- SOC1 compression/decompression with selectable level from 0.1 to 150.
+- SVM and quadratic-program optimization checks.
+- Conjugate-gradient smoothing solve with residual and iteration diagnostics.
+- K-means clustering, block-cost maps and spatial transition probabilities.
+- Covariance and feature-correlation heatmaps.
+- Simulated quantum edge analysis: a normalized 8 × 8 block is treated as 64 amplitudes, and a Hadamard-style neighbour difference produces an edge-probability map.
+- Richardson–Lucy photo restoration for blurry JPG/PNG inputs, with blur-width and iteration controls.
+- Per-run CSV, PNG and reconstructed-image outputs.
 
-![Original image and five decoded outputs with size and quality measurements](Version-2-Theme-A/results/graphs/six_image_comparison.png)
+## Requirements
+
+- MATLAB R2026a or newer.
+- Statistics and Machine Learning Toolbox.
+- Optimization Toolbox.
+- Python and `cvxopt==1.3.2` only for the optional CVXOPT comparison.
+
+## Credits
+
+Developed by **Dhanush Naidu** and **Keerthan Reddy**, Amrita Vishwa Vidyapeetham, for 22MAT220 Mathematics for Computing III.

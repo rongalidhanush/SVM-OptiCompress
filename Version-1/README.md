@@ -8,7 +8,7 @@ SVM-OptiCompress is an offline MATLAB application for exploring how image qualit
 
 ![Original sample and five decoded images with file sizes, PSNR and SSIM](results/graphs/six_image_comparison.png)
 
-This folder preserves the original codec implementation and benchmark. Start here to trace a block from prediction to a saved file. For the four additional course experiments, use [Version 2](../Version-2-Theme-A/README.md). [Back to the repository overview](../README.md).
+This folder preserves the original codec implementation and benchmark. Start here to trace a block from prediction to a saved file. For the final uploaded-image and quantum-edge experiments, use [Version 2 · Final](../Version-2-Final/README.md). [Back to the repository overview](../README.md).
 
 ## Run the project
 
